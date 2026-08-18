@@ -1,4 +1,4 @@
-# gkms_fl
+# gakumas-fast-launcher
 
 A lightweight Windows launcher for **Gakuen Idolmaster (Gakumas)** on DMM GAME PLAYER.
 
@@ -98,30 +98,6 @@ It does **not**:
 * launch DRM-protected titles that require the official client.
 
 When one of these operations is required, use the official DMM GAME PLAYER.
-
-## Build
-
-The repository defaults to the Windows GNU target.
-
-Build a release binary with:
-
-```bash
-cargo build --release
-```
-
-Output:
-
-```text
-target/x86_64-pc-windows-gnu/release/gkms_fl.exe
-```
-
-### Tests on Linux / WSL
-
-Run host-side tests with:
-
-```bash
-cargo test --target x86_64-unknown-linux-gnu
-```
 
 ## Acknowledgements
 
