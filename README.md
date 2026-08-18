@@ -105,7 +105,7 @@ Leave it empty or omit it to use the default installation path under `%PROGRAMFI
 
 ## Acknowledgements
 
-This project was heavily inspired by [DMMGamePlayerFastLauncher](https://github.com/fa0311/DMMGamePlayerFastLauncher) by yuki.
+This project was heavily inspired by [DMMGamePlayerFastLauncher](https://github.com/fa0311/DMMGamePlayerFastLauncher) by fa0311.
 
 The launcher has been reimplemented in Rust with additional changes and features. The original project is distributed under the MIT License.
 
