@@ -103,146 +103,199 @@ pub enum Error {
 
 impl Error {
     pub fn user_message(&self) -> String {
+        let log_file = crate::diag::file_name();
         match self {
-            Error::DgpDirMissing => {
-                "DMM GAME PLAYER data directory not found. Install DMM GAME PLAYER, sign in, then retry.\nExpected: %APPDATA%\\dmmgameplayer5"
-                    .to_string()
-            }
-            Error::DgpDirUnavailable { .. } => {
-                "DMM GAME PLAYER data directory could not be accessed. Check its permissions, then retry."
-                    .to_string()
-            }
-            Error::DgpExeMissing => {
-                "DMMGamePlayer.exe not found. Set dmm_path in config.toml to the exe (or its folder), or install DMM GAME PLAYER to %PROGRAMFILES%\\DMMGamePlayer\\DMMGamePlayer.exe"
-                    .to_string()
-            }
-            Error::LocalStateMissing => {
-                "Local State not found. Start official DMM GAME PLAYER once, sign in, then retry."
-                    .to_string()
-            }
-            Error::LocalStateUnreadable { .. } => {
-                "Local State could not be read. Close DMM GAME PLAYER, check the file permissions, then retry. Details are in the log next to gkms_fl.exe."
-                    .to_string()
-            }
-            Error::EncryptedKeyInvalid => {
-                "Could not read the DMM GAME PLAYER local encryption key. Sign in again in DMM GAME PLAYER after an upgrade. If the log shows APPB / v20, this launcher must be updated."
-                    .to_string()
-            }
-            Error::DpapiFailed { .. } => {
-                "Windows DPAPI decryption failed. Run gkms_fl.exe as the same Windows user that installed DMM GAME PLAYER (not another account, not a different elevated user)."
-                    .to_string()
-            }
-            Error::AuthStoreMissing => {
-                "Login credentials not found (authAccessTokenData.enc). Open DMM GAME PLAYER, sign in, then retry."
-                    .to_string()
-            }
-            Error::AuthStoreUnreadable { .. } => {
-                "Login credentials could not be read. Close DMM GAME PLAYER, check authAccessTokenData.enc permissions, then retry. Details are in the log next to gkms_fl.exe."
-                    .to_string()
-            }
-            Error::AuthPrefixUnsupported { prefix } => {
+            Error::DgpDirMissing => concat!(
+                "DMM GAME PLAYER data was not found.\n\n",
+                "What to do:\n",
+                "1. Install and open DMM GAME PLAYER.\n",
+                "2. Sign in to your DMM account.\n",
+                "3. Retry gkms_fl.\n\n",
+                "Expected folder:\n",
+                "%APPDATA%\\dmmgameplayer5"
+            )
+            .to_string(),
+            Error::DgpDirUnavailable { path, source } => {
                 format!(
-                    "DMM GAME PLAYER credential encryption format changed ({prefix}). This build cannot decrypt it. Update the launcher."
+                    "gkms_fl cannot access the DMM GAME PLAYER data folder.\n\nFolder:\n{}\n\nWhat to do:\nClose DMM GAME PLAYER, make sure this Windows account can read the folder, and retry.\n\nWindows reported:\n{source}",
+                    path.display()
                 )
             }
+            Error::DgpExeMissing => concat!(
+                "DMM GAME PLAYER could not be opened because DMMGamePlayer.exe was not found.\n\n",
+                "What to do:\n",
+                "Install DMM GAME PLAYER in its default location, or set dmm_path in config.toml beside gkms_fl.exe to the executable or its folder.\n\n",
+                "Default location:\n",
+                "%PROGRAMFILES%\\DMMGamePlayer\\DMMGamePlayer.exe"
+            )
+            .to_string(),
+            Error::LocalStateMissing => concat!(
+                "Required DMM GAME PLAYER encryption data was not found.\n\n",
+                "What to do:\n",
+                "Open DMM GAME PLAYER, sign in, close it, then retry gkms_fl.\n\n",
+                "Missing file:\n",
+                "Local State"
+            )
+            .to_string(),
+            Error::LocalStateUnreadable { path, source } => {
+                format!(
+                    "gkms_fl cannot read DMM GAME PLAYER encryption data.\n\nFile:\n{}\n\nWhat to do:\nClose DMM GAME PLAYER, make sure this Windows account can read the file, and retry.\n\nWindows reported:\n{source}",
+                    path.display()
+                )
+            }
+            Error::EncryptedKeyInvalid => {
+                "gkms_fl could not use DMM GAME PLAYER's local encryption key.\n\nWhat to do:\nOpen DMM GAME PLAYER and sign in again, then retry. If the problem continues, update gkms_fl because the credential format may have changed."
+                    .to_string()
+            }
+            Error::DpapiFailed { detail } => {
+                format!(
+                    "Windows could not decrypt the saved DMM credentials for this account.\n\nWhat to do:\nRun gkms_fl from the same Windows account that signed in to DMM GAME PLAYER. Do not use \"Run as different user\".\n\nWindows reported:\n{detail}"
+                )
+            }
+            Error::AuthStoreMissing => concat!(
+                "DMM GAME PLAYER login data was not found.\n\n",
+                "What to do:\n",
+                "Open DMM GAME PLAYER, sign in, close it, then retry gkms_fl.\n\n",
+                "Missing file:\n",
+                "authAccessTokenData.enc"
+            )
+            .to_string(),
+            Error::AuthStoreUnreadable { path, source } => {
+                format!(
+                    "gkms_fl cannot read the saved DMM login data.\n\nFile:\n{}\n\nWhat to do:\nClose DMM GAME PLAYER, make sure this Windows account can read the file, and retry.\n\nWindows reported:\n{source}",
+                    path.display()
+                )
+            }
+            Error::AuthPrefixUnsupported { .. } => {
+                "gkms_fl does not support the current DMM GAME PLAYER credential format.\n\nWhat to do:\nUpdate gkms_fl. If you already have the latest release, launch the game through DMM GAME PLAYER for now."
+                    .to_string()
+            }
             Error::AuthDecryptFailed => {
-                "Failed to decrypt login credentials. Open DMM GAME PLAYER, sign in again, then retry."
+                "Saved DMM GAME PLAYER login data could not be decrypted.\n\nWhat to do:\nOpen DMM GAME PLAYER, sign in again, close it, then retry gkms_fl."
                     .to_string()
             }
             Error::AccessTokenMissing => {
-                "No valid accessToken in the saved credentials. Open DMM GAME PLAYER, sign in again, then retry."
+                "DMM GAME PLAYER login data does not contain a valid sign-in token.\n\nWhat to do:\nOpen DMM GAME PLAYER, sign in again, close it, then retry gkms_fl."
                     .to_string()
             }
-            Error::ConfigMissing => {
-                "dmmgame.cnf not found. Install Gakuen Idolmaster with DMM GAME PLAYER, then retry."
-                    .to_string()
+            Error::ConfigMissing => concat!(
+                "Gakuen Idolmaster installation data was not found.\n\n",
+                "What to do:\n",
+                "Open DMM GAME PLAYER and install or repair Gakuen Idolmaster, then retry gkms_fl.\n\n",
+                "Missing file:\n",
+                "dmmgame.cnf"
+            )
+            .to_string(),
+            Error::ConfigInvalid { source } => {
+                format!(
+                    "DMM GAME PLAYER installation data is invalid or uses an unsupported format.\n\nWhat to do:\nOpen DMM GAME PLAYER and repair Gakuen Idolmaster. If the problem continues, update gkms_fl.\n\nParser reported:\n{source}\n\nMore details are in {log_file} beside gkms_fl.exe."
+                )
             }
-            Error::ConfigInvalid { .. } => {
-                "dmmgame.cnf is invalid. Repair the Gakuen Idolmaster installation in DMM GAME PLAYER, then retry. Details are in the log next to gkms_fl.exe."
-                    .to_string()
-            }
-            Error::ConfigUnreadable { .. } => {
-                "dmmgame.cnf could not be read. Close DMM GAME PLAYER, check the file permissions, then retry. Details are in the log next to gkms_fl.exe."
-                    .to_string()
+            Error::ConfigUnreadable { path, source } => {
+                format!(
+                    "gkms_fl cannot read the DMM GAME PLAYER installation data.\n\nFile:\n{}\n\nWhat to do:\nClose DMM GAME PLAYER, make sure this Windows account can read the file, and retry.\n\nWindows reported:\n{source}",
+                    path.display()
+                )
             }
             Error::GakumasNotInstalled => {
-                "Gakuen Idolmaster (gakumas) is not installed in DMM GAME PLAYER (missing, not installed, or empty path). Install or repair it in DMM GAME PLAYER, then retry."
+                "DMM GAME PLAYER does not report Gakuen Idolmaster as installed.\n\nWhat to do:\nInstall the game, or use DMM GAME PLAYER's repair option if it is already installed, then retry gkms_fl."
                     .to_string()
             }
             Error::GameTypeUnsupported(ty) => {
                 format!(
-                    "Unsupported gameType from dmmgame.cnf: {ty}. Expected GCL, ACL, AMAIN, or GMAIN. Reinstall the game with DMM GAME PLAYER or update this launcher."
+                    "This Gakuen Idolmaster installation uses an unsupported game type: {ty}\n\nSupported types:\nGCL, ACL, AMAIN, GMAIN\n\nWhat to do:\nUpdate gkms_fl. If the problem continues, repair the game in DMM GAME PLAYER."
                 )
             }
             Error::TokenExpired => {
-                "DMM login expired (token 203 / E210012). Open DMM GAME PLAYER, sign in again, then retry. This launcher does not refresh tokens."
+                "Your DMM sign-in has expired.\n\nWhat to do:\nOpen DMM GAME PLAYER, sign in again, close it, then retry gkms_fl."
                     .to_string()
             }
             Error::DeviceAuthRequired => {
-                "DMM requires device authentication. Launch the game once with official DMM GAME PLAYER, then retry."
+                "DMM must verify this device before the game can start.\n\nWhat to do:\nOpen DMM GAME PLAYER and launch Gakuen Idolmaster once. Close the game, then retry gkms_fl."
                     .to_string()
             }
             Error::AreaBlocked { result_code } => {
                 format!(
-                    "DMM rejected this network (result_code {result_code}; area / country block). Use a Japan-region connection or set dmm_proxy in config.toml next to gkms_fl.exe to a Japan HTTP/SOCKS proxy, then retry. Official DMM GAME PLAYER may already be using a different accelerated route. See debug.log or gkms_fl.log next to the exe."
+                    "DMM blocked the launch request because this connection is outside a supported region.\n\nWhat to do:\nConnect through a Japan-region network and retry. To use a dedicated proxy, set dmm_proxy in config.toml beside gkms_fl.exe.\n\nProxy examples:\nhttp://127.0.0.1:7890\nsocks5h://127.0.0.1:7891\n\nDMM result code: {result_code}"
                 )
             }
             Error::VersionMismatch { local, latest } => {
                 format!(
-                    "Game version is outdated (local {local}, latest {latest}). This launcher does not download updates. Open DMM GAME PLAYER, update Gakuen Idolmaster, then retry."
+                    "Gakuen Idolmaster must be updated before it can start.\n\nInstalled version: {local}\nRequired version: {latest}\n\nWhat to do:\nOpen DMM GAME PLAYER and update the game, then retry gkms_fl. gkms_fl cannot install game updates."
                 )
             }
             Error::DrmUnsupported => {
-                "The launch response includes a DRM token. This launcher cannot start DRM-protected titles. Use official DMM GAME PLAYER."
+                "DMM requires DRM handling that gkms_fl does not support.\n\nWhat to do:\nLaunch the game through DMM GAME PLAYER."
                     .to_string()
             }
             Error::ExeMissing(path) => {
                 format!(
-                    "Game executable not found:\n{}\nReinstall Gakuen Idolmaster with DMM GAME PLAYER or check that dmmgame.cnf path is correct.",
+                    "The Gakuen Idolmaster executable was not found.\n\nExpected file:\n{}\n\nWhat to do:\nOpen DMM GAME PLAYER and repair or reinstall the game, then retry gkms_fl.",
                     path.display()
                 )
             }
-            Error::SpawnFailed { .. } => {
-                "Failed to start gakumas.exe. Check that the install path has no quotes, the file is not blocked by antivirus, and if DMM asked for admin, approve the UAC prompt. See the log next to gkms_fl.exe."
-                    .to_string()
+            Error::SpawnFailed { detail } => {
+                format!(
+                    "Windows could not start the requested program.\n\nWhat to do:\n1. Close any existing DMM GAME PLAYER or game process.\n2. Check whether antivirus or security software blocked the program.\n3. Retry, and approve the Windows UAC prompt if one appears.\n\nWindows reported:\n{detail}\n\nMore details are in {log_file} beside gkms_fl.exe."
+                )
             }
-            Error::Http(_) => {
-                "Could not reach the DMM launch API (network or proxy). Check the internet connection. If you use a proxy, set dmm_proxy in config.toml next to gkms_fl.exe (http://host:port or socks5h://host:port) and confirm that port is listening. Then retry. Details are in debug.log or gkms_fl.log."
-                    .to_string()
+            Error::Http(detail) => {
+                format!(
+                    "gkms_fl could not connect to the DMM launch service.\n\nWhat to do:\n1. Check your internet connection.\n2. If config.toml contains dmm_proxy, make sure the proxy is running and reachable.\n3. Retry.\n\nNetwork error:\n{detail}\n\nMore details are in {log_file} beside gkms_fl.exe."
+                )
             }
-            Error::Api { result_code, error } => {
-                let detail = if error.is_empty() {
-                    String::new()
+            Error::Api {
+                result_code,
+                error,
+            } => {
+                let dmm_message = error.trim();
+                let dmm_message = if dmm_message.is_empty() {
+                    "No message provided."
                 } else {
-                    format!(" DMM said: {error}.")
+                    dmm_message
                 };
                 format!(
-                    "DMM launch failed (result_code {result_code}).{detail} Retry after signing in with DMM GAME PLAYER. See debug.log or gkms_fl.log next to the exe."
+                    "DMM rejected the launch request.\n\nResult code: {result_code}\nDMM message: {dmm_message}\n\nWhat to do:\nRetry once. If it fails again, sign in to DMM GAME PLAYER and launch the game there.\n\nMore details are in {log_file} beside gkms_fl.exe."
                 )
             }
             Error::LaunchParse => {
-                "DMM launch API returned a response this launcher could not parse. Retry. If it persists, update the launcher or start the game from DMM GAME PLAYER. See the log next to gkms_fl.exe."
-                    .to_string()
+                format!(
+                    "DMM returned launch data that this version of gkms_fl cannot understand.\n\nWhat to do:\nUpdate gkms_fl and retry. If you already have the latest release, launch the game through DMM GAME PLAYER.\n\nMore details are in {log_file} beside gkms_fl.exe."
+                )
             }
             Error::DeviceRandomFailed => {
-                "Could not generate a random device fingerprint. Retry. If it persists, see the log next to gkms_fl.exe."
+                format!(
+                    "Windows could not generate a temporary device identifier.\n\nWhat to do:\nRetry gkms_fl. If the problem happens again, restart Windows and check {log_file} beside gkms_fl.exe."
+                )
+            }
+            Error::SettingsInvalid { source } => {
+                format!(
+                    "config.toml contains invalid settings.\n\nWhat to do:\nCompare it with example_cfg.toml. If you do not need a custom proxy or DMM GAME PLAYER path, delete config.toml and retry.\n\nParser reported:\n{source}"
+                )
+            }
+            Error::SettingsUnreadable { path, source } => {
+                format!(
+                    "gkms_fl cannot read config.toml.\n\nFile:\n{}\n\nWhat to do:\nMake sure this Windows account can read the file, or delete it if you do not need custom settings, then retry.\n\nWindows reported:\n{source}",
+                    path.display()
+                )
+            }
+            Error::ProxyInvalid => concat!(
+                "The dmm_proxy value in config.toml is not a valid proxy URL.\n\n",
+                "Use one of these forms:\n",
+                "http://127.0.0.1:7890\n",
+                "socks5h://127.0.0.1:7891\n\n",
+                "To connect directly, remove dmm_proxy or leave it empty."
+            )
+            .to_string(),
+            Error::LogPathUnavailable => {
+                "gkms_fl could not determine where to create its diagnostic log.\n\nWhat to do:\nMove gkms_fl.exe to a normal local folder that you can write to, then retry."
                     .to_string()
             }
-            Error::SettingsInvalid { .. } => {
-                "config.toml next to gkms_fl.exe is invalid. Compare it with example_cfg.toml (dmm_proxy, dmm_path), then retry."
-                    .to_string()
-            }
-            Error::SettingsUnreadable { .. } => {
-                "config.toml next to gkms_fl.exe could not be read. Check its permissions, then retry. Details are in the log next to gkms_fl.exe."
-                    .to_string()
-            }
-            Error::ProxyInvalid => {
-                "Invalid dmm_proxy in config.toml. Use http://127.0.0.1:PORT or socks5h://127.0.0.1:PORT (SOCKS must be socks5h, not a random scheme). Leave it empty to connect directly."
-                    .to_string()
-            }
-            Error::LogPathUnavailable | Error::LogWriteFailed { .. } => {
-                "Could not write the log file next to gkms_fl.exe. Move the exe to a writable folder and retry."
-                    .to_string()
+            Error::LogWriteFailed { path, source } => {
+                format!(
+                    "gkms_fl could not create its diagnostic log.\n\nFile:\n{}\n\nWhat to do:\nMove gkms_fl.exe to a writable folder, or fix the folder permissions, then retry.\n\nWindows reported:\n{source}",
+                    path.display()
+                )
             }
         }
     }

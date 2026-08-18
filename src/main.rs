@@ -7,7 +7,10 @@ fn main() {
         Ok(Err(e)) => handle_error(&e),
         Err(_) => {
             gkmasfl::diag::error("panic");
-            show("Internal launcher error. See debug.log or gkms_fl.log next to gkms_fl.exe.");
+            let log_file = gkmasfl::diag::file_name();
+            show(&format!(
+                "gkms_fl stopped because of an unexpected internal error.\n\nWhat to do:\nRetry once. If the problem happens again, update gkms_fl and include {log_file} when reporting it.\n\nThe log file is beside gkms_fl.exe."
+            ));
         }
     }
 }

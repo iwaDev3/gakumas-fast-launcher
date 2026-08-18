@@ -74,7 +74,7 @@ fn write_line(level: &str, msg: &str) {
         writeln!(&mut log.file, "{} [{level}] {msg}", timestamp()).and_then(|_| log.file.flush());
     if let Err(source) = result {
         let failure = format!(
-            "Could not continue writing the launcher log at {}: {source}",
+            "The launcher can no longer write to its diagnostic log.\n\nLog file:\n{}\n\nWhat to do:\nMake sure the folder is writable. The launch will continue, but no more diagnostic information can be recorded.\n\nWindows reported:\n{source}",
             log.path.display()
         );
         *slot = None;
@@ -85,7 +85,7 @@ fn write_line(level: &str, msg: &str) {
 
 fn report_write_failure(message: &str) {
     #[cfg(windows)]
-    crate::ui::error(message);
+    crate::ui::warning(message);
 
     #[cfg(not(windows))]
     {
