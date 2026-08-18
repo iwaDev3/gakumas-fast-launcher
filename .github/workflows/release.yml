@@ -107,10 +107,19 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
 
-          $targets = @(
-            "x86_64-pc-windows-msvc",
-            "i686-pc-windows-msvc",
-            "aarch64-pc-windows-msvc"
+          $builds = @(
+            @{
+              Target = "x86_64-pc-windows-msvc"
+              Suffix = "windows-x64"
+            }
+            @{
+              Target = "i686-pc-windows-msvc"
+              Suffix = "windows-x86"
+            }
+            @{
+              Target = "aarch64-pc-windows-msvc"
+              Suffix = "windows-arm64"
+            }
           )
 
           New-Item `
@@ -118,7 +127,9 @@ jobs:
             -Force `
             -Path "dist" | Out-Null
 
-          foreach ($target in $targets) {
+          foreach ($build in $builds) {
+            $target = $build.Target
+            $suffix = $build.Suffix
             Write-Host ""
             Write-Host "Building $target..."
 
@@ -141,7 +152,7 @@ jobs:
 
             $destination = Join-Path `
               "dist" `
-              "gkms_fl-$env:GITHUB_REF_NAME-$target.exe"
+              "gkms_fl-$env:GITHUB_REF_NAME-$($suffix).exe"
 
             Copy-Item `
               -Path $source `
@@ -207,6 +218,29 @@ jobs:
           $ErrorActionPreference = "Stop"
           $tag = $env:GITHUB_REF_NAME
 
+          $notes = @'
+          ## Downloads
+
+          Select the build that matches the Windows system architecture.
+
+          | Asset | Platform |
+          | --- | --- |
+          | `gkms_fl-{tag}-windows-x64.exe` | 64-bit Windows on Intel or AMD processors. Use this build for most PCs. |
+          | `gkms_fl-{tag}-windows-arm64.exe` | Windows on ARM64 processors, including Snapdragon-based Windows PCs. |
+          | `gkms_fl-{tag}-windows-x86.exe` | 32-bit Windows on Intel or AMD processors. |
+
+          If the architecture is unknown, use the x64 build. Windows lists the architecture under **Settings > System > About > System type**.
+
+          ### Other files
+
+          - `SHA256SUMS.txt` contains SHA-256 checksums for verifying the downloads.
+          - GitHub's source archives contain the project source, not a Windows executable.
+          - Artifact attestations provide build provenance for the release assets.
+
+          ---
+          '@
+          $notes = $notes.Replace("{tag}", $tag)
+
           $draftState = gh release view `
             "$tag" `
             --json isDraft `
@@ -227,6 +261,7 @@ jobs:
               --verify-tag `
               --draft `
               --generate-notes `
+              --notes "$notes" `
               --title "$tag"
 
             if ($LASTEXITCODE -ne 0) {
@@ -250,9 +285,38 @@ jobs:
           foreach ($asset in $assets) {
             Write-Host "Uploading $($asset.Name)..."
 
+            $label = switch -Wildcard ($asset.Name) {
+              "*-windows-x64.exe" {
+                "Windows x64 (Intel/AMD; recommended)"
+                break
+              }
+              "*-windows-arm64.exe" {
+                "Windows ARM64 (ARM/Snapdragon)"
+                break
+              }
+              "*-windows-x86.exe" {
+                "Windows x86 (32-bit)"
+                break
+              }
+              "SHA256SUMS.txt" {
+                "SHA-256 checksums"
+                break
+              }
+              default {
+                $null
+              }
+            }
+
+            if ($label) {
+              $uploadSpec = "$($asset.FullName)#$label"
+            }
+            else {
+              $uploadSpec = $asset.FullName
+            }
+
             gh release upload `
               "$tag" `
-              "$($asset.FullName)" `
+              "$uploadSpec" `
               --clobber
 
             if ($LASTEXITCODE -ne 0) {
