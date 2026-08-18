@@ -4,7 +4,7 @@ A lightweight Windows launcher for **Gakuen Idolmaster (Gakumas)** on DMM GAME P
 
 `gkms_fl` uses your existing DMM GAME PLAYER login session to launch the game directly, without requiring you to manually start the DMM client beforehand.
 
-**Small binary · Optional HTTP/SOCKS5 proxy · Written in Rust**
+**Small binary size · Optional HTTP/SOCKS5 proxy · Written in Rust**
 
 ## Features
 
@@ -29,7 +29,7 @@ A lightweight Windows launcher for **Gakuen Idolmaster (Gakumas)** on DMM GAME P
 2. Optionally, copy [`example_cfg.toml`](example_cfg.toml) to `config.toml` in the same directory.
 3. Run `gkms_fl.exe`.
 
-No configuration file is required.
+No configuration file is required if you are in japan.
 
 If `config.toml` is missing, or if `dmm_proxy` / `dmm_path` are omitted, the launcher will:
 
@@ -37,6 +37,20 @@ If `config.toml` is missing, or if `dmm_proxy` / `dmm_path` are omitted, the lau
 * look for `DMMGamePlayer.exe` in the default `%PROGRAMFILES%` installation path.
 
 If the game cannot be launched directly, an error dialog will explain the problem. When appropriate, the dialog provides an option to open the official DMM GAME PLAYER, for example when the game needs an update or your DMM session needs to be refreshed.
+
+## Scope and Limitations
+
+`gkms_fl` is intentionally limited to launching an already installed and playable game(gakumas).
+
+It does **not**:
+
+* download or install game updates;
+* update DMM GAME PLAYER;
+* refresh expired DMM login sessions;
+* replace the official DMM GAME PLAYER for account management;
+* launch DRM-protected titles that require the official client.
+
+When one of these operations is required, open the official DMM GAME PLAYER and handle them manully.
 
 ## Configuration
 
@@ -84,20 +98,6 @@ dmm_path = "C:\\Program Files\\DMMGamePlayer\\DMMGamePlayer.exe"
 ```
 
 Leave it empty or omit it to use the default installation path under `%PROGRAMFILES%`.
-
-## Scope and Limitations
-
-`gkms_fl` is intentionally limited to launching an already installed and usable game(gakumas).
-
-It does **not**:
-
-* download or install game updates;
-* update DMM GAME PLAYER;
-* refresh expired DMM login sessions;
-* replace the official DMM GAME PLAYER for account management;
-* launch DRM-protected titles that require the official client.
-
-When one of these operations is required, use the official DMM GAME PLAYER.
 
 ## Acknowledgements
 
