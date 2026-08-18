@@ -3,7 +3,9 @@ use aes_gcm::aead::Aead;
 use aes_gcm::{Aes128Gcm, Aes256Gcm, Key, KeyInit, Nonce};
 use zeroize::Zeroizing;
 
-pub fn split_v10(blob: &[u8]) -> Result<(&[u8], &[u8], &[u8]), Error> {
+type V10Parts<'a> = (&'a [u8], &'a [u8], &'a [u8]);
+
+pub fn split_v10(blob: &[u8]) -> Result<V10Parts<'_>, Error> {
     if blob.len() < 3 {
         return Err(Error::AuthDecryptFailed);
     }

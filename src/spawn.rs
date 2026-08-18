@@ -5,6 +5,7 @@ pub(crate) fn split_execute_args(execute_args: &str) -> Vec<&str> {
     execute_args.split_ascii_whitespace().collect()
 }
 
+#[cfg(any(windows, test))]
 fn append_win_arg(cmd: &mut String, arg: &str) {
     cmd.push(' ');
     if arg.chars().any(|c| c.is_ascii_whitespace()) {
