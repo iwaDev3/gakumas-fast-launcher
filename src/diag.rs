@@ -1,10 +1,16 @@
 use crate::error::Error;
 use std::fs::File;
 use std::io::Write;
+use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-static LOG: Mutex<Option<File>> = Mutex::new(None);
+struct LogFile {
+    file: File,
+    path: PathBuf,
+}
+
+static LOG: Mutex<Option<LogFile>> = Mutex::new(None);
 
 pub fn file_name() -> &'static str {
     if cfg!(debug_assertions) {
@@ -15,11 +21,17 @@ pub fn file_name() -> &'static str {
 }
 
 pub fn init() -> Result<(), Error> {
-    let dir = crate::config::exe_dir().ok_or(Error::LogWriteFailed)?;
+    let dir = crate::config::exe_dir().ok_or(Error::LogPathUnavailable)?;
     let path = dir.join(file_name());
-    let file = File::create(&path).map_err(|_| Error::LogWriteFailed)?;
+    let file = File::create(&path).map_err(|source| Error::LogWriteFailed {
+        path: path.clone(),
+        source,
+    })?;
     let mut slot = LOG.lock().unwrap_or_else(|e| e.into_inner());
-    *slot = Some(file);
+    *slot = Some(LogFile {
+        file,
+        path: path.clone(),
+    });
     drop(slot);
     info(&format!(
         "gkms_fl {} {} os={} arch={}",
@@ -55,11 +67,31 @@ pub fn debug(msg: &str) {
 
 fn write_line(level: &str, msg: &str) {
     let mut slot = LOG.lock().unwrap_or_else(|e| e.into_inner());
-    let Some(file) = slot.as_mut() else {
+    let Some(log) = slot.as_mut() else {
         return;
     };
-    let _ = writeln!(file, "{} [{level}] {msg}", timestamp());
-    let _ = file.flush();
+    let result =
+        writeln!(&mut log.file, "{} [{level}] {msg}", timestamp()).and_then(|_| log.file.flush());
+    if let Err(source) = result {
+        let failure = format!(
+            "Could not continue writing the launcher log at {}: {source}",
+            log.path.display()
+        );
+        *slot = None;
+        drop(slot);
+        report_write_failure(&failure);
+    }
+}
+
+fn report_write_failure(message: &str) {
+    #[cfg(windows)]
+    crate::ui::error(message);
+
+    #[cfg(not(windows))]
+    {
+        let mut stderr = std::io::stderr().lock();
+        let _ = writeln!(stderr, "{message}");
+    }
 }
 
 fn timestamp() -> String {

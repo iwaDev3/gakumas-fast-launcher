@@ -1,20 +1,58 @@
 use crate::error::Error;
 use std::path::Path;
 
-pub(crate) fn split_execute_args(execute_args: &str) -> Vec<&str> {
-    execute_args.split_ascii_whitespace().collect()
+#[cfg(any(windows, test))]
+fn append_win_arg(cmd: &mut String, arg: &str) {
+    if !cmd.is_empty() {
+        cmd.push(' ');
+    }
+
+    let quoted = arg.is_empty() || arg.bytes().any(|b| matches!(b, b' ' | b'\t'));
+    if quoted {
+        cmd.push('"');
+    }
+
+    let mut backslashes = 0usize;
+    for ch in arg.chars() {
+        if ch == '\\' {
+            backslashes += 1;
+            continue;
+        }
+
+        if ch == '"' {
+            cmd.extend(std::iter::repeat_n('\\', backslashes * 2 + 1));
+            cmd.push('"');
+        } else {
+            cmd.extend(std::iter::repeat_n('\\', backslashes));
+            cmd.push(ch);
+        }
+        backslashes = 0;
+    }
+
+    let trailing = if quoted { backslashes * 2 } else { backslashes };
+    cmd.extend(std::iter::repeat_n('\\', trailing));
+    if quoted {
+        cmd.push('"');
+    }
 }
 
 #[cfg(any(windows, test))]
-fn append_win_arg(cmd: &mut String, arg: &str) {
-    cmd.push(' ');
-    if arg.chars().any(|c| c.is_ascii_whitespace()) {
-        cmd.push('"');
-        cmd.push_str(arg);
-        cmd.push('"');
-    } else {
-        cmd.push_str(arg);
+fn encode_win_args(args: &[&str]) -> String {
+    let mut encoded = String::new();
+    for arg in args {
+        append_win_arg(&mut encoded, arg);
     }
+    encoded
+}
+
+#[cfg(any(windows, test))]
+fn create_process_command_line(exe: &Path, parameters: &str) -> String {
+    let mut command_line = format!("\"{}\"", exe.display());
+    if !parameters.is_empty() {
+        command_line.push(' ');
+        command_line.push_str(parameters);
+    }
+    command_line
 }
 
 pub(crate) fn dgp_chromium_args(spec: &str) -> Result<Vec<String>, Error> {
@@ -72,7 +110,9 @@ fn find_dgp_exe_default() -> Option<std::path::PathBuf> {
 pub fn spawn_dgp(dmm_proxy: Option<&str>, dmm_exe: Option<&str>) -> Result<(), Error> {
     let exe = resolve_dgp_path(dmm_exe).ok_or(Error::DgpExeMissing)?;
     if exe.to_string_lossy().contains('"') {
-        return Err(Error::SpawnFailed);
+        return Err(Error::SpawnFailed {
+            detail: format!("DMMGamePlayer.exe path contains a quote: {}", exe.display()),
+        });
     }
     let extra = match dmm_proxy {
         Some(spec) => dgp_chromium_args(spec)?,
@@ -89,12 +129,15 @@ pub fn spawn_dgp(dmm_proxy: Option<&str>, dmm_exe: Option<&str>) -> Result<(), E
     ));
     #[cfg(windows)]
     {
-        spawn_windows(&exe, cwd, &args, false)
+        let parameters = encode_win_args(&args);
+        spawn_windows(&exe, cwd, &parameters, false)
     }
     #[cfg(not(windows))]
     {
         let _ = (args, cwd);
-        Err(Error::SpawnFailed)
+        Err(Error::SpawnFailed {
+            detail: "DMM GAME PLAYER process creation is only supported on Windows".into(),
+        })
     }
 }
 
@@ -110,24 +153,27 @@ pub fn spawn_game(
     }
     let exe_display = exe.to_string_lossy();
     if exe_display.contains('"') {
-        return Err(Error::SpawnFailed);
+        return Err(Error::SpawnFailed {
+            detail: format!("game executable path contains a quote: {}", exe.display()),
+        });
     }
-    let args = split_execute_args(execute_args);
     crate::diag::info(&format!(
-        "spawn exe={} admin={} arg_count={} cwd={}",
+        "spawn exe={} admin={} parameters_len={} cwd={}",
         exe.display(),
         is_administrator,
-        args.len(),
+        execute_args.len(),
         install_dir.display()
     ));
     #[cfg(windows)]
     {
-        spawn_windows(&exe, install_dir, &args, is_administrator)
+        spawn_windows(&exe, install_dir, execute_args, is_administrator)
     }
     #[cfg(not(windows))]
     {
-        let _ = (args, is_administrator);
-        Err(Error::SpawnFailed)
+        let _ = (execute_args, is_administrator);
+        Err(Error::SpawnFailed {
+            detail: "game process creation is only supported on Windows".into(),
+        })
     }
 }
 
@@ -135,18 +181,18 @@ pub fn spawn_game(
 fn spawn_windows(
     exe: &Path,
     install_dir: &Path,
-    args: &[&str],
+    parameters: &str,
     is_administrator: bool,
 ) -> Result<(), Error> {
     use std::os::windows::ffi::OsStrExt;
-    use windows::core::{w, PCWSTR};
     use windows::Win32::Foundation::CloseHandle;
     use windows::Win32::System::Threading::{
-        CreateProcessW, CREATE_NEW_PROCESS_GROUP, DETACHED_PROCESS, PROCESS_INFORMATION,
+        CREATE_NEW_PROCESS_GROUP, CreateProcessW, DETACHED_PROCESS, PROCESS_INFORMATION,
         STARTUPINFOW,
     };
     use windows::Win32::UI::Shell::ShellExecuteW;
     use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    use windows::core::{PCWSTR, w};
 
     let exe_wide: Vec<u16> = exe
         .as_os_str()
@@ -160,39 +206,44 @@ fn spawn_windows(
         .collect();
 
     if is_administrator {
-        let args_only = args.join(" ");
-        let args_wide: Vec<u16> = args_only.encode_utf16().chain(std::iter::once(0)).collect();
+        let parameters_wide: Vec<u16> = parameters
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect();
         let ret = unsafe {
             ShellExecuteW(
                 None,
                 w!("runas"),
                 PCWSTR(exe_wide.as_ptr()),
-                PCWSTR(args_wide.as_ptr()),
+                PCWSTR(parameters_wide.as_ptr()),
                 PCWSTR(dir_wide.as_ptr()),
                 SW_SHOWNORMAL,
             )
         };
         if ret.0 as isize <= 32 {
-            return Err(Error::SpawnFailed);
+            return Err(Error::SpawnFailed {
+                detail: format!("ShellExecuteW returned {}", ret.0 as isize),
+            });
         }
         return Ok(());
     }
 
-    let exe_quoted = format!("\"{}\"", exe.display());
-    let mut cmdline = exe_quoted;
-    for arg in args {
-        append_win_arg(&mut cmdline, arg);
-    }
-    let mut cmd_wide: Vec<u16> = cmdline.encode_utf16().chain(std::iter::once(0)).collect();
+    let command_line = create_process_command_line(exe, parameters);
+    let mut command_wide: Vec<u16> = command_line
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
 
-    let mut si = STARTUPINFOW::default();
-    si.cb = std::mem::size_of::<STARTUPINFOW>() as u32;
+    let si = STARTUPINFOW {
+        cb: std::mem::size_of::<STARTUPINFOW>() as u32,
+        ..Default::default()
+    };
     let mut pi = PROCESS_INFORMATION::default();
 
     unsafe {
         CreateProcessW(
             PCWSTR(exe_wide.as_ptr()),
-            Some(windows::core::PWSTR(cmd_wide.as_mut_ptr())),
+            Some(windows::core::PWSTR(command_wide.as_mut_ptr())),
             None,
             None,
             false,
@@ -202,7 +253,9 @@ fn spawn_windows(
             &si,
             &mut pi,
         )
-        .map_err(|_| Error::SpawnFailed)?;
+        .map_err(|source| Error::SpawnFailed {
+            detail: format!("CreateProcessW for {} failed: {source}", exe.display()),
+        })?;
         let _ = CloseHandle(pi.hThread);
         let _ = CloseHandle(pi.hProcess);
     }
@@ -214,26 +267,46 @@ mod tests {
     use super::*;
 
     #[test]
-    fn split_gakumas_args() {
-        let args = split_execute_args("/viewer_id=a /open_id=b /pf_access_token=c");
-        assert_eq!(
-            args,
-            [" /viewer_id=a", " /open_id=b", " /pf_access_token=c"]
-                .iter()
-                .map(|s| s.trim())
-                .collect::<Vec<_>>()
-        );
-        assert_eq!(args.len(), 3);
-        assert_eq!(args[0], "/viewer_id=a");
-        assert_eq!(args[1], "/open_id=b");
-        assert_eq!(args[2], "/pf_access_token=c");
+    fn game_parameters_are_preserved_verbatim() {
+        let exe = Path::new(r"C:\Program Files\gakumas\gakumas.exe");
+        for parameters in [
+            "",
+            "\"\"",
+            "\"a b\"",
+            "\"a  b\"",
+            "\"a\tb\"",
+            "a\\\"b",
+            "a\\\\\\\"b",
+            "\"C:\\path with space\\\\\"",
+        ] {
+            let expected = if parameters.is_empty() {
+                format!("\"{}\"", exe.display())
+            } else {
+                format!("\"{}\" {parameters}", exe.display())
+            };
+            assert_eq!(
+                create_process_command_line(exe, parameters),
+                expected,
+                "{parameters:?}"
+            );
+        }
     }
 
     #[test]
-    fn split_drops_empty() {
-        let args = split_execute_args("  /viewer_id=a  /open_id=b  ");
-        assert_eq!(args, ["/viewer_id=a", "/open_id=b"]);
-        assert!(args.iter().all(|t| !t.is_empty()));
+    fn encode_win_args_handles_quotes_and_backslashes() {
+        fn encode(arg: &str) -> String {
+            encode_win_args(&[arg])
+        }
+
+        assert_eq!(encode(""), "\"\"");
+        assert_eq!(encode("a b"), "\"a b\"");
+        assert_eq!(encode("a\"b"), "a\\\"b");
+        assert_eq!(encode("a\\\"b"), "a\\\\\\\"b");
+        assert_eq!(encode("C:\\path\\"), "C:\\path\\");
+        assert_eq!(
+            encode("C:\\path with space\\"),
+            "\"C:\\path with space\\\\\""
+        );
     }
 
     #[test]
@@ -252,14 +325,14 @@ mod tests {
 
     #[test]
     fn quote_spaced_arg() {
-        let mut cmd = String::from("\"app.exe\"");
-        append_win_arg(&mut cmd, "--proxy-server=http://127.0.0.1:1");
+        let mut command_line = String::from("\"app.exe\"");
+        append_win_arg(&mut command_line, "--proxy-server=http://127.0.0.1:1");
         append_win_arg(
-            &mut cmd,
+            &mut command_line,
             "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1",
         );
         assert_eq!(
-            cmd,
+            command_line,
             "\"app.exe\" --proxy-server=http://127.0.0.1:1 \"--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1\""
         );
     }

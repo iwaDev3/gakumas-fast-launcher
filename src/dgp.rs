@@ -1,7 +1,7 @@
 use crate::crypto;
 use crate::error::Error;
-use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use serde::Deserialize;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -53,7 +53,16 @@ struct CnfDetail {
 pub fn dgp_paths() -> Result<DgpPaths, Error> {
     let appdata = std::env::var_os("APPDATA").ok_or(Error::DgpDirMissing)?;
     let root = PathBuf::from(appdata).join("dmmgameplayer5");
-    if !root.is_dir() {
+    let metadata = match fs::metadata(&root) {
+        Ok(metadata) => metadata,
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::DgpDirMissing);
+        }
+        Err(source) => {
+            return Err(Error::DgpDirUnavailable { path: root, source });
+        }
+    };
+    if !metadata.is_dir() {
         return Err(Error::DgpDirMissing);
     }
     Ok(DgpPaths {
@@ -65,7 +74,18 @@ pub fn dgp_paths() -> Result<DgpPaths, Error> {
 }
 
 pub fn read_os_crypt_key(local_state: &Path) -> Result<Zeroizing<Vec<u8>>, Error> {
-    let text = fs::read_to_string(local_state).map_err(|_| Error::LocalStateMissing)?;
+    let text = match fs::read_to_string(local_state) {
+        Ok(text) => text,
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::LocalStateMissing);
+        }
+        Err(source) => {
+            return Err(Error::LocalStateUnreadable {
+                path: local_state.to_path_buf(),
+                source,
+            });
+        }
+    };
     let value: serde_json::Value =
         serde_json::from_str(&text).map_err(|_| Error::EncryptedKeyInvalid)?;
     let b64 = value
@@ -94,7 +114,9 @@ fn unprotect_os_crypt_key(payload: &[u8]) -> Result<Zeroizing<Vec<u8>>, Error> {
 
 #[cfg(not(windows))]
 fn unprotect_os_crypt_key(_payload: &[u8]) -> Result<Zeroizing<Vec<u8>>, Error> {
-    Err(Error::DpapiFailed)
+    Err(Error::DpapiFailed {
+        detail: "DPAPI is only available on Windows".into(),
+    })
 }
 
 pub fn parse_access_token(bytes: &[u8]) -> Result<Zeroizing<String>, Error> {
@@ -106,7 +128,18 @@ pub fn parse_access_token(bytes: &[u8]) -> Result<Zeroizing<String>, Error> {
 }
 
 pub fn read_access_token(auth_store: &Path, key: &[u8]) -> Result<Zeroizing<String>, Error> {
-    let blob = fs::read(auth_store).map_err(|_| Error::AuthStoreMissing)?;
+    let blob = match fs::read(auth_store) {
+        Ok(blob) => blob,
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::AuthStoreMissing);
+        }
+        Err(source) => {
+            return Err(Error::AuthStoreUnreadable {
+                path: auth_store.to_path_buf(),
+                source,
+            });
+        }
+    };
     let prefix = blob.get(..3).unwrap_or(&[]);
     crate::diag::info(&format!(
         "auth blob_len={} prefix={}",
@@ -119,7 +152,8 @@ pub fn read_access_token(auth_store: &Path, key: &[u8]) -> Result<Zeroizing<Stri
 }
 
 pub fn parse_gakumas_cnf(json: &str) -> Result<GakumasInstall, Error> {
-    let file: CnfFile = serde_json::from_str(json).map_err(|_| Error::ConfigMissing)?;
+    let file: CnfFile =
+        serde_json::from_str(json).map_err(|source| Error::ConfigInvalid { source })?;
     file.contents
         .into_iter()
         .find(|item| {
@@ -134,7 +168,18 @@ pub fn parse_gakumas_cnf(json: &str) -> Result<GakumasInstall, Error> {
 }
 
 pub fn read_gakumas_install(config: &Path) -> Result<GakumasInstall, Error> {
-    let text = fs::read_to_string(config).map_err(|_| Error::ConfigMissing)?;
+    let text = match fs::read_to_string(config) {
+        Ok(text) => text,
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => {
+            return Err(Error::ConfigMissing);
+        }
+        Err(source) => {
+            return Err(Error::ConfigUnreadable {
+                path: config.to_path_buf(),
+                source,
+            });
+        }
+    };
     parse_gakumas_cnf(&text)
 }
 
@@ -202,7 +247,10 @@ mod tests {
 
     #[test]
     fn cnf_invalid_json() {
-        assert!(matches!(parse_gakumas_cnf("{"), Err(Error::ConfigMissing)));
+        assert!(matches!(
+            parse_gakumas_cnf("{"),
+            Err(Error::ConfigInvalid { .. })
+        ));
     }
 
     #[test]
@@ -225,5 +273,25 @@ mod tests {
             parse_access_token(br#"{"accessToken":""}"#),
             Err(Error::AccessTokenMissing)
         ));
+    }
+
+    #[test]
+    fn local_state_read_error_keeps_io_context() {
+        let path = std::env::temp_dir().join(format!("gkmasfl-local-state-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&path);
+        fs::create_dir_all(&path).unwrap();
+
+        match read_os_crypt_key(&path) {
+            Err(Error::LocalStateUnreadable {
+                path: error_path,
+                source,
+            }) => {
+                assert_eq!(error_path, path);
+                assert_ne!(source.kind(), std::io::ErrorKind::NotFound);
+            }
+            other => panic!("expected LocalStateUnreadable, got {other:?}"),
+        }
+
+        fs::remove_dir_all(&path).unwrap();
     }
 }

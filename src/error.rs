@@ -1,27 +1,57 @@
+use std::io;
 use std::path::PathBuf;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("DGP directory missing")]
     DgpDirMissing,
+    #[error("DGP directory unavailable at {}: {source}", path.display())]
+    DgpDirUnavailable {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
     #[error("DMMGamePlayer.exe missing")]
     DgpExeMissing,
     #[error("Local State missing")]
     LocalStateMissing,
+    #[error("Local State unreadable at {}: {source}", path.display())]
+    LocalStateUnreadable {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
     #[error("encrypted_key invalid")]
     EncryptedKeyInvalid,
-    #[error("DPAPI decrypt failed")]
-    DpapiFailed,
+    #[error("DPAPI decrypt failed: {detail}")]
+    DpapiFailed { detail: String },
     #[error("auth store missing")]
     AuthStoreMissing,
+    #[error("auth store unreadable at {}: {source}", path.display())]
+    AuthStoreUnreadable {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
     #[error("unsupported auth prefix: {prefix}")]
     AuthPrefixUnsupported { prefix: String },
     #[error("auth decrypt failed")]
     AuthDecryptFailed,
     #[error("accessToken missing")]
     AccessTokenMissing,
-    #[error("dmmgame.cnf missing or invalid")]
+    #[error("dmmgame.cnf missing")]
     ConfigMissing,
+    #[error("dmmgame.cnf invalid: {source}")]
+    ConfigInvalid {
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("dmmgame.cnf unreadable at {}: {source}", path.display())]
+    ConfigUnreadable {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
     #[error("gakumas not installed")]
     GakumasNotInstalled,
     #[error("unsupported gameType: {0}")]
@@ -38,8 +68,8 @@ pub enum Error {
     DrmUnsupported,
     #[error("exe missing: {}", .0.display())]
     ExeMissing(PathBuf),
-    #[error("spawn failed")]
-    SpawnFailed,
+    #[error("spawn failed: {detail}")]
+    SpawnFailed { detail: String },
     #[error("http error: {0}")]
     Http(String),
     #[error("DMM api result_code={result_code}: {error}")]
@@ -48,12 +78,27 @@ pub enum Error {
     LaunchParse,
     #[error("device RNG failed")]
     DeviceRandomFailed,
-    #[error("config.toml invalid")]
-    SettingsInvalid,
+    #[error("config.toml invalid: {source}")]
+    SettingsInvalid {
+        #[source]
+        source: toml::de::Error,
+    },
+    #[error("config.toml unreadable at {}: {source}", path.display())]
+    SettingsUnreadable {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
     #[error("dmm_proxy invalid")]
     ProxyInvalid,
-    #[error("log write failed")]
-    LogWriteFailed,
+    #[error("log path unavailable")]
+    LogPathUnavailable,
+    #[error("log write failed at {}: {source}", path.display())]
+    LogWriteFailed {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
 }
 
 impl Error {
@@ -61,6 +106,10 @@ impl Error {
         match self {
             Error::DgpDirMissing => {
                 "DMM GAME PLAYER data directory not found. Install DMM GAME PLAYER, sign in, then retry.\nExpected: %APPDATA%\\dmmgameplayer5"
+                    .to_string()
+            }
+            Error::DgpDirUnavailable { .. } => {
+                "DMM GAME PLAYER data directory could not be accessed. Check its permissions, then retry."
                     .to_string()
             }
             Error::DgpExeMissing => {
@@ -71,16 +120,24 @@ impl Error {
                 "Local State not found. Start official DMM GAME PLAYER once, sign in, then retry."
                     .to_string()
             }
+            Error::LocalStateUnreadable { .. } => {
+                "Local State could not be read. Close DMM GAME PLAYER, check the file permissions, then retry. Details are in the log next to gkms_fl.exe."
+                    .to_string()
+            }
             Error::EncryptedKeyInvalid => {
                 "Could not read the DMM GAME PLAYER local encryption key. Sign in again in DMM GAME PLAYER after an upgrade. If the log shows APPB / v20, this launcher must be updated."
                     .to_string()
             }
-            Error::DpapiFailed => {
+            Error::DpapiFailed { .. } => {
                 "Windows DPAPI decryption failed. Run gkms_fl.exe as the same Windows user that installed DMM GAME PLAYER (not another account, not a different elevated user)."
                     .to_string()
             }
             Error::AuthStoreMissing => {
                 "Login credentials not found (authAccessTokenData.enc). Open DMM GAME PLAYER, sign in, then retry."
+                    .to_string()
+            }
+            Error::AuthStoreUnreadable { .. } => {
+                "Login credentials could not be read. Close DMM GAME PLAYER, check authAccessTokenData.enc permissions, then retry. Details are in the log next to gkms_fl.exe."
                     .to_string()
             }
             Error::AuthPrefixUnsupported { prefix } => {
@@ -97,7 +154,15 @@ impl Error {
                     .to_string()
             }
             Error::ConfigMissing => {
-                "dmmgame.cnf not found or invalid. Install Gakuen Idolmaster with DMM GAME PLAYER, then retry."
+                "dmmgame.cnf not found. Install Gakuen Idolmaster with DMM GAME PLAYER, then retry."
+                    .to_string()
+            }
+            Error::ConfigInvalid { .. } => {
+                "dmmgame.cnf is invalid. Repair the Gakuen Idolmaster installation in DMM GAME PLAYER, then retry. Details are in the log next to gkms_fl.exe."
+                    .to_string()
+            }
+            Error::ConfigUnreadable { .. } => {
+                "dmmgame.cnf could not be read. Close DMM GAME PLAYER, check the file permissions, then retry. Details are in the log next to gkms_fl.exe."
                     .to_string()
             }
             Error::GakumasNotInstalled => {
@@ -137,7 +202,7 @@ impl Error {
                     path.display()
                 )
             }
-            Error::SpawnFailed => {
+            Error::SpawnFailed { .. } => {
                 "Failed to start gakumas.exe. Check that the install path has no quotes, the file is not blocked by antivirus, and if DMM asked for admin, approve the UAC prompt. See the log next to gkms_fl.exe."
                     .to_string()
             }
@@ -163,15 +228,19 @@ impl Error {
                 "Could not generate a random device fingerprint. Retry. If it persists, see the log next to gkms_fl.exe."
                     .to_string()
             }
-            Error::SettingsInvalid => {
+            Error::SettingsInvalid { .. } => {
                 "config.toml next to gkms_fl.exe is invalid. Compare it with example_cfg.toml (dmm_proxy, dmm_path), then retry."
+                    .to_string()
+            }
+            Error::SettingsUnreadable { .. } => {
+                "config.toml next to gkms_fl.exe could not be read. Check its permissions, then retry. Details are in the log next to gkms_fl.exe."
                     .to_string()
             }
             Error::ProxyInvalid => {
                 "Invalid dmm_proxy in config.toml. Use http://127.0.0.1:PORT or socks5h://127.0.0.1:PORT (SOCKS must be socks5h, not a random scheme). Leave it empty to connect directly."
                     .to_string()
             }
-            Error::LogWriteFailed => {
+            Error::LogPathUnavailable | Error::LogWriteFailed { .. } => {
                 "Could not write the log file next to gkms_fl.exe. Move the exe to a writable folder and retry."
                     .to_string()
             }
@@ -182,12 +251,17 @@ impl Error {
         matches!(
             self,
             Error::DgpDirMissing
+                | Error::DgpDirUnavailable { .. }
                 | Error::LocalStateMissing
+                | Error::LocalStateUnreadable { .. }
                 | Error::EncryptedKeyInvalid
                 | Error::AuthStoreMissing
+                | Error::AuthStoreUnreadable { .. }
                 | Error::AuthDecryptFailed
                 | Error::AccessTokenMissing
                 | Error::ConfigMissing
+                | Error::ConfigInvalid { .. }
+                | Error::ConfigUnreadable { .. }
                 | Error::GakumasNotInstalled
                 | Error::TokenExpired
                 | Error::DeviceAuthRequired
@@ -205,13 +279,27 @@ mod tests {
     fn open_dgp_offers() {
         assert!(Error::TokenExpired.offers_open_dgp());
         assert!(Error::AuthStoreMissing.offers_open_dgp());
-        assert!(Error::VersionMismatch {
-            local: "1".into(),
-            latest: "2".into()
-        }
-        .offers_open_dgp());
+        assert!(
+            Error::AuthStoreUnreadable {
+                path: PathBuf::from("auth.enc"),
+                source: io::Error::other("locked"),
+            }
+            .offers_open_dgp()
+        );
+        assert!(
+            Error::VersionMismatch {
+                local: "1".into(),
+                latest: "2".into()
+            }
+            .offers_open_dgp()
+        );
         assert!(!Error::Http("x".into()).offers_open_dgp());
         assert!(!Error::AreaBlocked { result_code: 803 }.offers_open_dgp());
-        assert!(!Error::SpawnFailed.offers_open_dgp());
+        assert!(
+            !Error::SpawnFailed {
+                detail: "test".into()
+            }
+            .offers_open_dgp()
+        );
     }
 }

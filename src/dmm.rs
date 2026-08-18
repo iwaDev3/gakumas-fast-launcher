@@ -88,7 +88,11 @@ pub fn map_launch_envelope(env: DmmEnvelope<LaunchData>) -> Result<LaunchOk, Err
     if data.exec_file_name.is_empty() {
         data.exec_file_name = FALLBACK_EXE.to_string();
     }
-    if data.drm_auth_token.as_deref().is_some_and(|t| !t.is_empty()) {
+    if data
+        .drm_auth_token
+        .as_deref()
+        .is_some_and(|t| !t.is_empty())
+    {
         return Err(Error::DrmUnsupported);
     }
     Ok(LaunchOk {

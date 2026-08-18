@@ -42,15 +42,16 @@ pub fn load() -> Result<Config, Error> {
     let Some(path) = config_path() else {
         return Ok(Config::default());
     };
-    if !path.is_file() {
-        return Ok(Config::default());
+    match fs::read_to_string(&path) {
+        Ok(text) => parse_config(&text),
+        Err(source) if source.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
+        Err(source) => Err(Error::SettingsUnreadable { path, source }),
     }
-    let text = fs::read_to_string(&path).map_err(|_| Error::SettingsInvalid)?;
-    parse_config(&text)
 }
 
 pub fn parse_config(text: &str) -> Result<Config, Error> {
-    let raw: RawConfig = toml::from_str(text).map_err(|_| Error::SettingsInvalid)?;
+    let raw: RawConfig =
+        toml::from_str(text).map_err(|source| Error::SettingsInvalid { source })?;
     let dmm_proxy = normalize_optional(raw.dmm_proxy);
     if let Some(url) = dmm_proxy.as_deref() {
         ureq::Proxy::new(url).map_err(|_| Error::ProxyInvalid)?;
@@ -107,7 +108,7 @@ mod tests {
     fn invalid_toml() {
         assert!(matches!(
             parse_config("dmm_proxy = "),
-            Err(Error::SettingsInvalid)
+            Err(Error::SettingsInvalid { .. })
         ));
     }
 
@@ -115,7 +116,7 @@ mod tests {
     fn unknown_key() {
         assert!(matches!(
             parse_config("foo = 1\n"),
-            Err(Error::SettingsInvalid)
+            Err(Error::SettingsInvalid { .. })
         ));
     }
 

@@ -53,9 +53,11 @@ mod tests {
 
         let parts: Vec<&str> = a.mac_address.split(':').collect();
         assert_eq!(parts.len(), 6);
-        assert!(parts
-            .iter()
-            .all(|p| p.len() == 2 && p.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f'))));
+        assert!(
+            parts
+                .iter()
+                .all(|p| p.len() == 2 && p.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f')))
+        );
         let first = u8::from_str_radix(&a.mac_address[0..2], 16).unwrap();
         assert_eq!(first & 0x01, 0);
         assert_eq!(first & 0x02, 0x02);

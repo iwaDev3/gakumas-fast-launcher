@@ -1,5 +1,5 @@
+use windows::Win32::UI::WindowsAndMessaging::{IDYES, MB_ICONERROR, MB_OK, MB_YESNO, MessageBoxW};
 use windows::core::HSTRING;
-use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, IDYES, MB_ICONERROR, MB_OK, MB_YESNO};
 
 pub fn error(msg: &str) {
     unsafe {

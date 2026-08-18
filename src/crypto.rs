@@ -5,6 +5,64 @@ use zeroize::Zeroizing;
 
 type V10Parts<'a> = (&'a [u8], &'a [u8], &'a [u8]);
 
+#[cfg(any(windows, test))]
+unsafe fn zeroize_raw_buffer(data: *mut u8, len: usize) {
+    if data.is_null() || len == 0 {
+        return;
+    }
+    let bytes = unsafe { std::slice::from_raw_parts_mut(data, len) };
+    use zeroize::Zeroize;
+    bytes.zeroize();
+}
+
+#[cfg(windows)]
+struct DpapiOutput {
+    blob: windows::Win32::Security::Cryptography::CRYPT_INTEGER_BLOB,
+}
+
+#[cfg(windows)]
+impl DpapiOutput {
+    fn new() -> Self {
+        Self {
+            blob: windows::Win32::Security::Cryptography::CRYPT_INTEGER_BLOB {
+                cbData: 0,
+                pbData: std::ptr::null_mut(),
+            },
+        }
+    }
+
+    fn copy_plaintext(&self) -> Result<Zeroizing<Vec<u8>>, Error> {
+        let len = self.blob.cbData as usize;
+        if len == 0 {
+            return Ok(Zeroizing::new(Vec::new()));
+        }
+        if self.blob.pbData.is_null() {
+            return Err(Error::DpapiFailed {
+                detail: "CryptUnprotectData returned a null output buffer".into(),
+            });
+        }
+        let plain = unsafe { std::slice::from_raw_parts(self.blob.pbData, len) }.to_vec();
+        Ok(Zeroizing::new(plain))
+    }
+}
+
+#[cfg(windows)]
+impl Drop for DpapiOutput {
+    fn drop(&mut self) {
+        if self.blob.pbData.is_null() {
+            return;
+        }
+        unsafe {
+            zeroize_raw_buffer(self.blob.pbData, self.blob.cbData as usize);
+            let _ = windows::Win32::Foundation::LocalFree(Some(
+                windows::Win32::Foundation::HLOCAL(self.blob.pbData.cast()),
+            ));
+        }
+        self.blob.pbData = std::ptr::null_mut();
+        self.blob.cbData = 0;
+    }
+}
+
 pub fn split_v10(blob: &[u8]) -> Result<V10Parts<'_>, Error> {
     if blob.len() < 3 {
         return Err(Error::AuthDecryptFailed);
@@ -67,27 +125,27 @@ fn decrypt_aes128(
 
 #[cfg(windows)]
 pub fn dpapi_unprotect(data: &[u8]) -> Result<Zeroizing<Vec<u8>>, Error> {
-    use windows::Win32::Foundation::{LocalFree, HLOCAL};
     use windows::Win32::Security::Cryptography::{
-        CryptUnprotectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB,
+        CRYPT_INTEGER_BLOB, CRYPTPROTECT_UI_FORBIDDEN, CryptUnprotectData,
     };
-    use zeroize::Zeroize;
 
     if data.is_empty() {
-        return Err(Error::DpapiFailed);
+        return Err(Error::DpapiFailed {
+            detail: "encrypted input is empty".into(),
+        });
     }
+    let input_len = u32::try_from(data.len()).map_err(|_| Error::DpapiFailed {
+        detail: "encrypted input is larger than DPAPI supports".into(),
+    })?;
 
-    let mut input = data.to_vec();
+    let mut input = Zeroizing::new(data.to_vec());
     let in_blob = CRYPT_INTEGER_BLOB {
-        cbData: input.len() as u32,
+        cbData: input_len,
         pbData: input.as_mut_ptr(),
     };
-    let mut out_blob = CRYPT_INTEGER_BLOB {
-        cbData: 0,
-        pbData: std::ptr::null_mut(),
-    };
+    let mut output = DpapiOutput::new();
 
-    let result = unsafe {
+    unsafe {
         CryptUnprotectData(
             &in_blob,
             None,
@@ -95,26 +153,14 @@ pub fn dpapi_unprotect(data: &[u8]) -> Result<Zeroizing<Vec<u8>>, Error> {
             None,
             None,
             CRYPTPROTECT_UI_FORBIDDEN,
-            &mut out_blob,
+            &mut output.blob,
         )
-    };
-
-    input.zeroize();
-
-    match result {
-        Ok(()) => {
-            let plain =
-                unsafe { std::slice::from_raw_parts(out_blob.pbData, out_blob.cbData as usize) }
-                    .to_vec();
-            if !out_blob.pbData.is_null() {
-                unsafe {
-                    let _ = LocalFree(Some(HLOCAL(out_blob.pbData.cast())));
-                }
-            }
-            Ok(Zeroizing::new(plain))
-        }
-        Err(_) => Err(Error::DpapiFailed),
     }
+    .map_err(|source| Error::DpapiFailed {
+        detail: source.to_string(),
+    })?;
+
+    output.copy_plaintext()
 }
 
 #[cfg(test)]
@@ -177,5 +223,14 @@ mod tests {
         assert!(matches!(split_v10(b"v10"), Err(Error::AuthDecryptFailed)));
         let short = [b'v', b'1', b'0', 0, 1, 2];
         assert!(matches!(split_v10(&short), Err(Error::AuthDecryptFailed)));
+    }
+
+    #[test]
+    fn raw_buffer_is_zeroized() {
+        let mut bytes = [0x42; 32];
+        unsafe {
+            zeroize_raw_buffer(bytes.as_mut_ptr(), bytes.len());
+        }
+        assert_eq!(bytes, [0; 32]);
     }
 }
