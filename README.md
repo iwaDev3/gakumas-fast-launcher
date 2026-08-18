@@ -1,10 +1,14 @@
 # gakumas-fast-launcher
 
+[![Release](https://github.com/iwaDev3/gakumas-fast-launcher/actions/workflows/release.yml/badge.svg)](https://github.com/iwaDev3/gakumas-fast-launcher/actions/workflows/release.yml)
+
 A lightweight Windows launcher for **Gakuen Idolmaster (Gakumas)** on DMM GAME PLAYER.
 
 `gkms_fl` uses your existing DMM GAME PLAYER login session to launch the game directly, without requiring you to manually start the DMM client beforehand.
 
 **Small binary size · Optional HTTP/SOCKS5 proxy · Written in Rust**
+
+Release binaries are built automatically by GitHub Actions and include GitHub Artifact Attestations for build provenance verification.
 
 ## Features
 
