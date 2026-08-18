@@ -1,46 +1,123 @@
 # gkms_fl
 
-A small Windows launcher for **Gakuen Idolmaster** (`gakumas`) on DMM GAME PLAYER. It uses your existing DGP login and starts the game without opening the DMM client.
+A lightweight Windows launcher for **Gakuen Idolmaster (Gakumas)** on DMM GAME PLAYER.
 
-**Small binary. Optional HTTP/SOCKS proxy for the DMM launch API.**
+`gkms_fl` uses your existing DMM GAME PLAYER login session to launch the game directly, without requiring you to manually start the DMM client beforehand.
+
+**Small binary · Optional HTTP/SOCKS5 proxy · Written in Rust**
+
+## Features
+
+* Launch Gakuen Idolmaster without manually starting DMM GAME PLAYER beforehand
+* Reuse the existing DMM GAME PLAYER login session
+* Optional HTTP or SOCKS5h proxy for the DMM launch API
+* Automatically locate a standard DMM GAME PLAYER installation
+* Show actionable error dialogs when something goes wrong
+* Offer to open the official DMM GAME PLAYER when an update or re-login is required
+* No background service or installer required
 
 ## Requirements
 
-- Windows
-- DMM GAME PLAYER installed and signed in
-- Gakuen Idolmaster installed and already up to date
+* Windows
+* DMM GAME PLAYER installed
+* Signed in to DMM GAME PLAYER
+* Gakuen Idolmaster installed and up to date
 
 ## Usage
 
-1. Put `gkms_fl.exe` in a writable folder.
-2. Optional: copy [`example_cfg.toml`](example_cfg.toml) to `config.toml` next to the exe.
-3. Double-click `gkms_fl.exe`.
+1. Place `gkms_fl.exe` in a writable directory.
+2. Optionally, copy [`example_cfg.toml`](example_cfg.toml) to `config.toml` in the same directory.
+3. Run `gkms_fl.exe`.
 
-If something fails, a dialog explains what to do. Some errors offer to start official DMM GAME PLAYER. Debug builds write `debug.log`; release builds write `gkms_fl.log` next to the exe.
+No configuration file is required.
 
-`config.toml` is optional. Missing file, or a valid file without `dmm_proxy` / `dmm_path`, means: connect to DMM directly, and find `DMMGamePlayer.exe` under `%PROGRAMFILES%`.
+If `config.toml` is missing, or if `dmm_proxy` / `dmm_path` are omitted, the launcher will:
+
+* connect to DMM directly;
+* look for `DMMGamePlayer.exe` in the default `%PROGRAMFILES%` installation path.
+
+If the game cannot be launched directly, an error dialog will explain the problem. When appropriate, the dialog provides an option to open the official DMM GAME PLAYER, for example when the game needs an update or your DMM session needs to be refreshed.
+
+## Configuration
+
+Example `config.toml`:
 
 ```toml
 dmm_proxy = "socks5h://127.0.0.1:20808"
 dmm_path = "C:\\Program Files\\DMMGamePlayer\\DMMGamePlayer.exe"
 ```
 
-- `dmm_proxy`: only the launch request to `apidgp-gameplayer.games.dmm.com` (`http://` or `socks5h://`). Empty = direct.
-- `dmm_path`: `DMMGamePlayer.exe` or its folder. Empty = default install path.
+### `dmm_proxy`
 
-This launcher does not download game updates, refresh tokens, or start DRM-protected titles.
+Optional proxy used **only for the DMM game launch API** at:
+
+```text
+apidgp-gameplayer.games.dmm.com
+```
+
+Supported schemes:
+
+```text
+http://
+socks5h://
+```
+
+Example:
+
+```toml
+dmm_proxy = "socks5h://127.0.0.1:20808"
+```
+
+Leave it empty or omit it entirely to connect directly.
+
+### `dmm_path`
+
+Optional path to either:
+
+* `DMMGamePlayer.exe`, or
+* the directory containing `DMMGamePlayer.exe`.
+
+Example:
+
+```toml
+dmm_path = "C:\\Program Files\\DMMGamePlayer\\DMMGamePlayer.exe"
+```
+
+Leave it empty or omit it to use the default installation path under `%PROGRAMFILES%`.
+
+## Scope and Limitations
+
+`gkms_fl` is intentionally limited to launching an already installed and usable game(gakumas).
+
+It does **not**:
+
+* download or install game updates;
+* update DMM GAME PLAYER;
+* refresh expired DMM login sessions;
+* replace the official DMM GAME PLAYER for account management;
+* launch DRM-protected titles that require the official client.
+
+When one of these operations is required, use the official DMM GAME PLAYER.
 
 ## Build
 
-Windows GNU target (default in this repo):
+The repository defaults to the Windows GNU target.
+
+Build a release binary with:
 
 ```bash
 cargo build --release
 ```
 
-Output: `target/x86_64-pc-windows-gnu/release/gkms_fl.exe`
+Output:
 
-Host tests on Linux/WSL:
+```text
+target/x86_64-pc-windows-gnu/release/gkms_fl.exe
+```
+
+### Tests on Linux / WSL
+
+Run host-side tests with:
 
 ```bash
 cargo test --target x86_64-unknown-linux-gnu
@@ -48,4 +125,14 @@ cargo test --target x86_64-unknown-linux-gnu
 
 ## Acknowledgements
 
+This project was heavily inspired by [DMMGamePlayerFastLauncher](https://github.com/fa0311/DMMGamePlayerFastLauncher) by yuki.
 
+The launcher has been reimplemented in Rust with additional changes and features. The original project is distributed under the MIT License.
+
+## License
+
+This project is licensed under the MIT License. See [`LICENSE`](LICENSE) for details.
+
+## Disclaimer
+
+This is an unofficial community project and is not affiliated with, endorsed by, or maintained by DMM.com or Bandai Namco Entertainment.
