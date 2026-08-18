@@ -1,0 +1,50 @@
+[package]
+name = "gkmasfl"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Gakuen Idolmaster fast launcher for DMM Game Player"
+
+[[bin]]
+name = "gkms_fl"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+aes-gcm = "0.10"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+zeroize = { version = "1.8", features = ["zeroize_derive"] }
+getrandom = "0.2"
+thiserror = "2"
+
+# rustls + gzip on by default. json for send_json/read_json.
+# Do not enable native-tls. Do not send Accept-Encoding we cannot decode.
+ureq = { version = "3.4", features = ["json", "socks-proxy"] }
+toml = "0.8"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_Cryptography",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Memory",
+    "Win32_System_Registry",
+    "Win32_System_Threading",
+    "Win32_System_SystemInformation",
+    "Win32_System_WindowsProgramming",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Shell",
+] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+opt-level = 3
+strip = true
+panic = "abort"

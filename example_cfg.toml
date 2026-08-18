@@ -1,0 +1,15 @@
+# Copy this file to config.toml next to gkms_fl.exe.
+# IF missing config.toml, or an empty dmm_proxy field: it will connect to DMM directly.
+# Does not read system or environment proxies.
+# A global/TUN proxy may still intercept traffic below this setting.
+
+# Proxy for the DMM launch API only (apidgp-gameplayer.games.dmm.com).
+# Examples:
+#   dmm_proxy = "http://127.0.0.1:7890"
+#   dmm_proxy = "socks5h://127.0.0.1:7891"
+dmm_proxy = ""
+
+# Full path to DMMGamePlayer.exe, or the folder that contains it.
+# Empty or missing file: try %PROGRAMFILES%\DMMGamePlayer\DMMGamePlayer.exe
+#   dmm_path = "C:\\Program Files\\DMMGamePlayer\\DMMGamePlayer.exe"
+dmm_path = ""
