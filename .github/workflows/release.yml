@@ -1,0 +1,276 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: windows-2025
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Rust
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+          rustup target add `
+            x86_64-pc-windows-msvc `
+            i686-pc-windows-msvc `
+            aarch64-pc-windows-msvc
+
+      - name: Show build environment
+        shell: pwsh
+        run: |
+          rustc --version --verbose
+          cargo --version
+          git --version
+          gh --version
+
+      # Require the tagged commit to belong to main.
+      - name: Verify tag commit is on main
+        shell: pwsh
+        run: |
+          git fetch origin main
+
+          git merge-base --is-ancestor `
+            "$env:GITHUB_SHA" `
+            "origin/main"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release tag must point to a commit contained in main."
+          }
+
+          Write-Host "Tag commit is contained in main."
+
+      # Require e.g.
+      #
+      # Cargo.toml:
+      # version = "0.2.0"
+      #
+      # Git tag:
+      # v0.2.0
+      - name: Verify tag matches Cargo.toml version
+        shell: pwsh
+        run: |
+          $metadata = cargo metadata `
+            --locked `
+            --no-deps `
+            --format-version 1 | ConvertFrom-Json
+
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
+
+          $version = $metadata.packages[0].version
+          $tag = $env:GITHUB_REF_NAME
+          $expectedTag = "v$version"
+
+          Write-Host "Cargo version: $version"
+          Write-Host "Git tag:       $tag"
+
+          if ($tag -ne $expectedTag) {
+            throw "Git tag '$tag' does not match Cargo.toml version '$version'. Expected '$expectedTag'."
+          }
+
+      # Run native Windows tests again before publishing.
+      - name: Test
+        shell: pwsh
+        run: |
+          cargo test --locked --all-targets
+
+      - name: Build release binaries
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $targets = @(
+            "x86_64-pc-windows-msvc",
+            "i686-pc-windows-msvc",
+            "aarch64-pc-windows-msvc"
+          )
+
+          New-Item `
+            -ItemType Directory `
+            -Force `
+            -Path "dist" | Out-Null
+
+          foreach ($target in $targets) {
+            Write-Host ""
+            Write-Host "Building $target..."
+
+            cargo build `
+              --release `
+              --locked `
+              --target $target
+
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+
+            $source = Join-Path `
+              "target" `
+              "$target\release\gkms_fl.exe"
+
+            if (-not (Test-Path $source)) {
+              throw "Expected binary was not produced: $source"
+            }
+
+            $destination = Join-Path `
+              "dist" `
+              "gkms_fl-$env:GITHUB_REF_NAME-$target.exe"
+
+            Copy-Item `
+              -Path $source `
+              -Destination $destination
+
+            Write-Host "Created $destination"
+          }
+
+      - name: Generate SHA256 checksums
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $checksumFile = "dist\SHA256SUMS.txt"
+
+          $lines = Get-ChildItem `
+            -Path "dist" `
+            -Filter "*.exe" `
+            -File |
+            Sort-Object Name |
+            ForEach-Object {
+              $hash = (
+                Get-FileHash `
+                  -Path $_.FullName `
+                  -Algorithm SHA256
+              ).Hash.ToLowerInvariant()
+
+              "$hash  $($_.Name)"
+            }
+
+          $lines | Set-Content `
+            -Path $checksumFile `
+            -Encoding ascii
+
+          Write-Host ""
+          Write-Host "SHA256SUMS.txt:"
+          Get-Content $checksumFile
+
+      - name: List release files
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path dist -File |
+            Sort-Object Name |
+            Format-Table Name, Length
+
+      # Cryptographically bind the generated files to this
+      # repository / commit / workflow run.
+      - name: Generate artifact attestations
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: "dist/*"
+
+      # Immutable Releases should be created as drafts first:
+      # create draft -> upload everything -> publish.
+      #
+      # This step also makes retries safe while the release is
+      # still a draft.
+      - name: Create or reuse draft release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = $env:GITHUB_REF_NAME
+
+          $draftState = gh release view `
+            "$tag" `
+            --json isDraft `
+            --jq ".isDraft" 2>$null
+
+          if ($LASTEXITCODE -eq 0) {
+            if ($draftState.Trim() -ne "true") {
+              throw "Release '$tag' already exists and is already published."
+            }
+
+            Write-Host "Existing draft release found; reusing it."
+          }
+          else {
+            Write-Host "Creating draft release $tag..."
+
+            gh release create `
+              "$tag" `
+              --verify-tag `
+              --draft `
+              --generate-notes `
+              --title "$tag"
+
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+          }
+
+      - name: Upload release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tag = $env:GITHUB_REF_NAME
+
+          $assets = Get-ChildItem `
+            -Path "dist" `
+            -File |
+            Sort-Object Name
+
+          foreach ($asset in $assets) {
+            Write-Host "Uploading $($asset.Name)..."
+
+            gh release upload `
+              "$tag" `
+              "$($asset.FullName)" `
+              --clobber
+
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+          }
+
+      # Publishing is the final operation.
+      # With Immutable Releases enabled, the tag/assets become immutable.
+      - name: Publish immutable release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release edit `
+            "$env:GITHUB_REF_NAME" `
+            --draft=false
+
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }

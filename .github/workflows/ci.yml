@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: "1"
+
+jobs:
+  linux:
+    name: Linux quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable \
+            --profile minimal \
+            --component rustfmt,clippy
+          rustup default stable
+
+      - name: Show Rust version
+        run: |
+          rustc --version --verbose
+          cargo --version
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --locked --all-targets
+
+
+  windows:
+    name: Windows validation
+    runs-on: windows-2025
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        shell: pwsh
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+          rustup target add `
+            x86_64-pc-windows-msvc `
+            i686-pc-windows-msvc `
+            aarch64-pc-windows-msvc
+
+      - name: Show Rust version
+        shell: pwsh
+        run: |
+          rustc --version --verbose
+          cargo --version
+
+      # Native Windows x86_64 tests.
+      # Unlike the Linux job, cfg(windows) is enabled here.
+      - name: Test on Windows
+        shell: pwsh
+        run: |
+          cargo test --locked --all-targets
+
+      - name: Build Windows x86_64
+        shell: pwsh
+        run: |
+          cargo build `
+            --release `
+            --locked `
+            --target x86_64-pc-windows-msvc
+
+      - name: Build Windows x86
+        shell: pwsh
+        run: |
+          cargo build `
+            --release `
+            --locked `
+            --target i686-pc-windows-msvc
+
+      - name: Build Windows ARM64
+        shell: pwsh
+        run: |
+          cargo build `
+            --release `
+            --locked `
+            --target aarch64-pc-windows-msvc
