@@ -4,7 +4,7 @@
 
 [![Release](https://github.com/iwaDev3/gakumas-fast-launcher/actions/workflows/release.yml/badge.svg)](https://github.com/iwaDev3/gakumas-fast-launcher/actions/workflows/release.yml)
 
-一款轻量级的 Windows 启动器，用于启动 DMM GAME PLAYER 上的**《学园偶像大师》（Gakumas）**。
+一款轻量级的 Windows 启动器，用于启动 DMM GAME PLAYER 上的《学园偶像大师》（Gakumas）。
 
 `gkms_fl` 使用现有的 DMM GAME PLAYER 登录会话直接启动游戏，无需事先手动启动 DMM 客户端。
 
