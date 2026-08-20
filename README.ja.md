@@ -4,8 +4,6 @@
 
 ## [English](README.md) | [简体中文](README.zh-CN.md) | **日本語**
 
-## 概要
-
 DMM GAME PLAYER版の「学園アイドルマスター（学マス）」を起動するための、軽量なWindows向けランチャーです。
 
 `gkms_fl`は既存のDMM GAME PLAYERのログインセッションを利用し、DMMクライアントを事前に手動で起動しなくてもゲームを直接起動します。
