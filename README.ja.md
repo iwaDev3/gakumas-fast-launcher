@@ -4,7 +4,7 @@
 
 [![Release](https://github.com/iwaDev3/gakumas-fast-launcher/actions/workflows/release.yml/badge.svg)](https://github.com/iwaDev3/gakumas-fast-launcher/actions/workflows/release.yml)
 
-DMM GAME PLAYER版の**「学園アイドルマスター（学マス）」**を起動するための、軽量なWindows向けランチャーです。
+DMM GAME PLAYER版の「学園アイドルマスター（学マス）」を起動するための、軽量なWindows向けランチャーです。
 
 `gkms_fl`は既存のDMM GAME PLAYERのログインセッションを利用し、DMMクライアントを事前に手動で起動しなくてもゲームを直接起動します。
 
