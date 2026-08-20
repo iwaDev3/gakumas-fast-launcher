@@ -4,7 +4,6 @@
 
 ## **English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
 
-## Overview
 
 A lightweight Windows launcher for **Gakuen Idolmaster (Gakumas)** on DMM GAME PLAYER.
 
