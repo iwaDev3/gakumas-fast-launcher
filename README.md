@@ -2,7 +2,9 @@
 
 [![Release](https://github.com/iwaDev3/gakumas-fast-launcher/actions/workflows/release.yml/badge.svg)](https://github.com/iwaDev3/gakumas-fast-launcher/actions/workflows/release.yml)
 
-**English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
+## **English** | [简体中文](README.zh-CN.md) | [日本語](README.ja.md)
+
+## Overview
 
 A lightweight Windows launcher for **Gakuen Idolmaster (Gakumas)** on DMM GAME PLAYER.
 

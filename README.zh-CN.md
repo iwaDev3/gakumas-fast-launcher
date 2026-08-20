@@ -1,8 +1,10 @@
-[English](README.md) | **简体中文** | [日本語](README.ja.md)
-
 # gakumas-fast-launcher
 
 [![Release](https://github.com/iwaDev3/gakumas-fast-launcher/actions/workflows/release.yml/badge.svg)](https://github.com/iwaDev3/gakumas-fast-launcher/actions/workflows/release.yml)
+
+## [English](README.md) | **简体中文** | [日本語](README.ja.md)
+
+## 简介
 
 一款轻量级的 Windows 启动器，用于启动 DMM GAME PLAYER 上的《学园偶像大师》（Gakumas）。
 

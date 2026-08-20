@@ -1,8 +1,10 @@
-[English](README.md) | [简体中文](README.zh-CN.md) | **日本語**
-
 # gakumas-fast-launcher
 
 [![Release](https://github.com/iwaDev3/gakumas-fast-launcher/actions/workflows/release.yml/badge.svg)](https://github.com/iwaDev3/gakumas-fast-launcher/actions/workflows/release.yml)
+
+## [English](README.md) | [简体中文](README.zh-CN.md) | **日本語**
+
+## 概要
 
 DMM GAME PLAYER版の「学園アイドルマスター（学マス）」を起動するための、軽量なWindows向けランチャーです。
 
